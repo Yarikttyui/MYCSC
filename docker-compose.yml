@@ -1,0 +1,83 @@
+# ============================================
+# MYCSC - Docker Compose
+# Production deployment with Nginx SSL
+# ============================================
+
+version: '3.8'
+
+services:
+  # ========== Nginx Reverse Proxy with SSL ==========
+  nginx:
+    image: nginx:alpine
+    container_name: mycsc-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - certbot_data:/var/www/certbot:ro
+    depends_on:
+      - app
+    networks:
+      - mycsc_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # ========== MYCSC Application ==========
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mycsc-app
+    restart: unless-stopped
+    expose:
+      - "3001"
+    ports:
+      - "${TCP_PORT:-3002}:3002"
+    volumes:
+      - mycsc_data:/app/data
+      - ./public/downloads:/app/public/downloads:ro
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - TCP_PORT=3002
+      - DATA_DIR=/app/data
+      - JWT_SECRET=${JWT_SECRET:-mycsc-secret-change-in-production}
+      - BASE_URL=${BASE_URL:-https://adskoekoleso.ru}
+      # OAuth Configuration
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+      # Email Configuration (mycsc@mail.ru)
+      - EMAIL_PASSWORD=${EMAIL_PASSWORD:-}
+      - EMAIL_FROM=mycsc@mail.ru
+    networks:
+      - mycsc_network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/config"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  mycsc_network:
+    driver: bridge
+
+volumes:
+  mycsc_data:
+    driver: local
+  certbot_data:
+    driver: local
+#       - mycsc

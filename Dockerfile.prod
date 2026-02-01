@@ -1,0 +1,36 @@
+# ============================================
+# MYCSC Database - Production Dockerfile
+# Simple deployment with pre-built dist
+# ============================================
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Create non-root user
+RUN addgroup -g 1001 -S mycsc && adduser -S mycsc -u 1001
+
+# Copy package.json
+COPY package.json ./
+
+# Install production dependencies only
+RUN npm install --omit=dev && npm cache clean --force
+
+# Copy pre-built dist
+COPY dist ./dist
+
+# Create data directory
+RUN mkdir -p /app/data && chown -R mycsc:mycsc /app
+
+# Switch to non-root user
+USER mycsc
+
+# Expose ports
+EXPOSE 3001 3002
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/config || exit 1
+
+# Start server
+CMD ["node", "dist/main/server/server.js"]
